@@ -51,7 +51,7 @@ local _bufs_listed = function()
   return vim.tbl_filter(function(buf) return vim.fn.buflisted(buf) == 1 end, vim.api.nvim_list_bufs())
 end
 
-local _populate = vim.schedule_wrap(function(buffers)
+local _populate = function(buffers)
   for i, b in ipairs(_bufs_listed()) do
     buffers[i] = {
       buf = b,
@@ -62,7 +62,7 @@ local _populate = vim.schedule_wrap(function(buffers)
     }
   end
   _make_names_unique(buffers)
-end)
+end
 
 local _state = {
   loaded = false,
@@ -141,7 +141,7 @@ function M.buffers()
 end
 
 function M.switch(buf, direction, opts)
-  if #_buffers < 2 then return end
+  if vim.fn.buflisted(buf) == 0 or #_buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
   local i = _idx(buf, _buffers) + direction
@@ -158,7 +158,7 @@ function M.switch(buf, direction, opts)
 end
 
 function M.move(buf, direction, opts)
-  if #_buffers < 2 then return end
+  if vim.fn.buflisted(buf) == 0 or #_buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
   local i = _idx(buf, _buffers)
