@@ -1,4 +1,4 @@
-local _bin_by_result = function(l, f)
+local function _bin_by_result(l, f)
   local bins = {}
   for i, x in ipairs(l) do
     local r = f and f(x) or x
@@ -11,7 +11,7 @@ local _bin_by_result = function(l, f)
   return bins
 end
 
-local _make_names_unique = function(buffers)
+local function _make_names_unique(buffers)
   for _, b in ipairs(buffers) do b.name.unique = b.name.tail end
   local tails = _bin_by_result(buffers, function(b) return b.name.tail end)
   for _, same_tail in vim.iter(pairs(tails)):filter(function(_, l) return #l > 1 end) do
@@ -41,17 +41,17 @@ local _make_names_unique = function(buffers)
   end
 end
 
-local _idx = function(buf, buffers)
+local function _idx(buf, buffers)
   for i, b in ipairs(buffers) do
     if b.buf == buf then return i end
   end
 end
 
-local _bufs_listed = function()
+local function _bufs_listed()
   return vim.tbl_filter(function(buf) return vim.fn.buflisted(buf) == 1 end, vim.api.nvim_list_bufs())
 end
 
-local _populate = function(buffers)
+local function _populate(buffers)
   for i, b in ipairs(_bufs_listed()) do
     buffers[i] = {
       buf = b,
