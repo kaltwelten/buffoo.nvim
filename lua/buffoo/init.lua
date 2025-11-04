@@ -184,7 +184,7 @@ function M.nearest(buf)
   local direction = i == 1 and 1 or -1
   local j = i + direction
   if j < 1 or j > #_buffers then return end
-  vim.cmd.buffer(_buffers[j].buf)
+  vim.api.nvim_win_set_buf(0, _buffers[j].buf)
 end
 
 function M.close(args)
@@ -202,12 +202,12 @@ function M.close(args)
       vim.fn.win_gettype(vim.api.nvim_get_current_win()) ~= '' or
       vim.iter(ipairs(vim.api.nvim_list_wins())):filter(function(_, w) return _buf_considered(vim.api.nvim_win_get_buf(w)) end):nth(2)
     then
-      vim.cmd.quit({ bang = force })
+      vim.api.nvim_win_close(0, force)
     else
       M.nearest(buf)
     end
     if #vim.fn.win_findbuf(buf) < 1 then
-      vim.cmd.bdelete({ buf, bang = force })
+      vim.api.nvim_buf_delete(buf, { force = force })
     end
   end
 end
