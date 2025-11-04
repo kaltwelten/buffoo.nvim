@@ -47,12 +47,16 @@ local function _idx(buf, buffers)
   end
 end
 
-local function _bufs_listed()
-  return vim.tbl_filter(function(buf) return vim.fn.buflisted(buf) == 1 end, vim.api.nvim_list_bufs())
+local function _buf_considered(buf)
+  return vim.fn.buflisted(buf) == 1 and vim.api.nvim_get_option_value('buftype', { buf = buf }) == ''
+end
+
+local function _bufs_considered()
+  return vim.tbl_filter(function(buf) return _buf_considered(buf) end, vim.api.nvim_list_bufs())
 end
 
 local function _populate(buffers)
-  for i, b in ipairs(_bufs_listed()) do
+  for i, b in ipairs(_bufs_considered()) do
     buffers[i] = {
       buf = b,
       name = {
@@ -109,7 +113,7 @@ function M.setup()
   vim.api.nvim_create_autocmd('BufAdd', {
     group = augroup,
     callback = vim.schedule_wrap(function(event)
-      if vim.api.nvim_get_option_value('buftype', { buf = event.buf }) == '' then
+      if _buf_considered(event.buf) then
         local i = _idx(_state.last_buf, _buffers) or #_buffers
         i = math.min(i + 1, #_buffers + 1)
         table.insert(_buffers, i, {
@@ -126,7 +130,7 @@ function M.setup()
   vim.api.nvim_create_autocmd('BufDelete', {
     group = augroup,
     callback = function(event)
-      if vim.api.nvim_get_option_value('buftype', { buf = event.buf }) == '' then
+      if _buf_considered(event.buf) then
         table.remove(_buffers, _idx(event.buf, _buffers))
         _make_names_unique(_buffers)
       end
@@ -141,7 +145,7 @@ function M.buffers()
 end
 
 function M.switch(buf, direction, opts)
-  if vim.fn.buflisted(buf) == 0 or #_buffers < 2 then return end
+  if not _buf_considered(buf) or #_buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
   local i = _idx(buf, _buffers) + direction
@@ -154,11 +158,11 @@ function M.switch(buf, direction, opts)
   else
     if i < 1 or i > #_buffers then return end
   end
-  vim.cmd.buffer(_buffers[i].buf)
+  vim.api.nvim_win_set_buf(0, _buffers[i].buf)
 end
 
 function M.move(buf, direction, opts)
-  if vim.fn.buflisted(buf) == 0 or #_buffers < 2 then return end
+  if not _buf_considered(buf) or #_buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
   local i = _idx(buf, _buffers)
@@ -190,13 +194,13 @@ function M.close(args)
     vim.notify('Won\'t close a modified buffer unless forced', vim.log.levels.WARN)
     return
   end
-  if #_bufs_listed() <= 1 then
+  if #_bufs_considered() <= 1 then
     vim.cmd.quit({ bang = force })
   else
     if
-      vim.fn.buflisted(buf) == 0 or
+      not _buf_considered(buf) or
       vim.fn.win_gettype(vim.api.nvim_get_current_win()) ~= '' or
-      vim.iter(ipairs(vim.api.nvim_list_wins())):filter(function(_, w) return vim.api.nvim_get_option_value('buftype', { buf = vim.api.nvim_win_get_buf(w) }) == '' end):nth(2)
+      vim.iter(ipairs(vim.api.nvim_list_wins())):filter(function(_, w) return _buf_considered(vim.api.nvim_win_get_buf(w)) end):nth(2)
     then
       vim.cmd.quit({ bang = force })
     else
