@@ -48,7 +48,7 @@ local function _idx(buf, buffers)
 end
 
 local function _buf_considered(buf)
-  return vim.fn.buflisted(buf) == 1 and vim.api.nvim_get_option_value('buftype', { buf = buf }) == ''
+  return vim.bo[buf].buflisted and vim.bo[buf].buftype == ''
 end
 
 local function _bufs_considered()
@@ -68,33 +68,30 @@ local function _populate(buffers)
   _make_names_unique(buffers)
 end
 
-local _state = {
-  loaded = false,
-  last_buf = nil,
-}
-
-local _buffers = {}
+local _last_buf = nil
 
 local M = {}
 
 function M.setup()
-  if _state.loaded then return end
+  if M.loaded then return end
+  M.loaded = true
+  M.buffers = {}
   local augroup = vim.api.nvim_create_augroup('buffoo', { clear = true })
   if vim.v.vim_did_enter == 1 then
-    _populate(_buffers)
+    _populate(M.buffers)
   else
     vim.api.nvim_create_autocmd('VimEnter', {
       group = augroup,
-      callback = function() _populate(_buffers) end,
+      callback = function() _populate(M.buffers) end,
       once = true,
     })
   end
   vim.api.nvim_create_autocmd('BufEnter', {
     group = augroup,
     callback = function(event)
-      local b = _buffers[_idx(event.buf, _buffers)]
+      local b = M.buffers[_idx(event.buf, M.buffers)]
       if b then
-        _state.last_buf = b
+        _last_buf = b
         if b.view then vim.fn.winrestview(b.view) end
       end
     end,
@@ -102,7 +99,7 @@ function M.setup()
   vim.api.nvim_create_autocmd('BufLeave', {
     group = augroup,
     callback = function(event)
-      for _, b in ipairs(_buffers) do
+      for _, b in ipairs(M.buffers) do
         if b.buf == event.buf then
           b.view = vim.fn.winsaveview()
           break
@@ -114,16 +111,16 @@ function M.setup()
     group = augroup,
     callback = vim.schedule_wrap(function(event)
       if _buf_considered(event.buf) then
-        local i = _idx(_state.last_buf, _buffers) or #_buffers
-        i = math.min(i + 1, #_buffers + 1)
-        table.insert(_buffers, i, {
+        local i = _idx(_last_buf, M.buffers) or #M.buffers
+        i = math.min(i + 1, #M.buffers + 1)
+        table.insert(M.buffers, i, {
           buf = event.buf,
           name = {
             full = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(event.buf), ':~:.'),
             tail = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(event.buf), ':t'),
           },
         })
-        _make_names_unique(_buffers)
+        _make_names_unique(M.buffers)
       end
     end),
   })
@@ -131,66 +128,61 @@ function M.setup()
     group = augroup,
     callback = function(event)
       if _buf_considered(event.buf) then
-        table.remove(_buffers, _idx(event.buf, _buffers))
-        _make_names_unique(_buffers)
+        table.remove(M.buffers, _idx(event.buf, M.buffers))
+        _make_names_unique(M.buffers)
       end
     end,
   })
-  _state.last_buf = vim.api.nvim_get_current_buf()
-  _state.loaded = true
-end
-
-function M.buffers()
-  return _buffers
+  _last_buf = vim.api.nvim_get_current_buf()
 end
 
 function M.switch(buf, direction, opts)
-  if not _buf_considered(buf) or #_buffers < 2 then return end
+  if not _buf_considered(buf) or #M.buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
-  local i = _idx(buf, _buffers) + direction
+  local i = _idx(buf, M.buffers) + direction
   if cycle then
     if i < 1 then
-      i = #_buffers - i
-    elseif i > #_buffers then
-      i = i - #_buffers
+      i = #M.buffers - i
+    elseif i > #M.buffers then
+      i = i - #M.buffers
     end
   else
-    if i < 1 or i > #_buffers then return end
+    if i < 1 or i > #M.buffers then return end
   end
-  vim.api.nvim_win_set_buf(0, _buffers[i].buf)
+  vim.api.nvim_win_set_buf(0, M.buffers[i].buf)
 end
 
 function M.move(buf, direction, opts)
-  if not _buf_considered(buf) or #_buffers < 2 then return end
+  if not _buf_considered(buf) or #M.buffers < 2 then return end
   local cycle = opts and opts.cycle
   direction = direction < 0 and -1 or 1
-  local i = _idx(buf, _buffers)
+  local i = _idx(buf, M.buffers)
   local j = i + direction
   if cycle then
     if j < 1 then
-      j = #_buffers - j
-    elseif j > #_buffers then
-      j = j - #_buffers
+      j = #M.buffers - j
+    elseif j > #M.buffers then
+      j = j - #M.buffers
     end
   else
-    if j < 1 or j > #_buffers then return end
+    if j < 1 or j > #M.buffers then return end
   end
-  _buffers[i], _buffers[j] = _buffers[j], _buffers[i]
+  M.buffers[i], M.buffers[j] = M.buffers[j], M.buffers[i]
 end
 
 function M.nearest(buf)
-  local i = _idx(buf, _buffers)
+  local i = _idx(buf, M.buffers)
   local direction = i == 1 and 1 or -1
   local j = i + direction
-  if j < 1 or j > #_buffers then return end
-  vim.api.nvim_win_set_buf(0, _buffers[j].buf)
+  if j < 1 or j > #M.buffers then return end
+  vim.api.nvim_win_set_buf(0, M.buffers[j].buf)
 end
 
 function M.close(args)
   local force = args and args.force
   local buf = vim.api.nvim_get_current_buf()
-  if not force and vim.api.nvim_get_option_value('modified', { buf = buf }) then
+  if not force and vim.bo[buf].modified then
     vim.notify('Won\'t close a modified buffer unless forced', vim.log.levels.WARN)
     return
   end
